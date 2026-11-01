@@ -1,0 +1,145 @@
+{
+  "name": "Bot Agencia de Viajes - Captación de clientes",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "¡Hola! 👋 Soy el asistente virtual de la agencia.\n¿A dónde te gustaría viajar?",
+        "options": {
+          "title": "Agencia de Viajes",
+          "subtitle": "Te ayudamos a planificar tu viaje",
+          "inputPlaceholder": "Escribe tu mensaje..."
+        }
+      },
+      "id": "a1f0c7d2-0001-4a10-9b01-000000000001",
+      "name": "Chat del cliente",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "webhookId": "7b3c2a10-4d5e-4f60-8a71-b2c3d4e5f601"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=Eres el asistente virtual de una agencia de viajes. Hablas en español, con tono cálido, breve y profesional.\nFecha y hora actual: {{ $now.setZone('America/Caracas').toFormat('cccc d LLLL yyyy, HH:mm') }}.\n\n## Tu objetivo\nCaptar los datos del cliente para que un vendedor humano le envíe la cotización o confirme la reserva.\nNO das precios, NO confirmas disponibilidad y NO cierras ventas. Eso lo hace el vendedor.\nSi preguntan el precio, explica que un vendedor les enviará la cotización exacta en breve, y sigue captando datos.\n\n## Datos a captar\nObligatorios:\n1. nombre: nombre y apellido.\n2. telefono: teléfono o WhatsApp de contacto.\n3. destino: ciudad, isla o país.\n4. fecha_salida: fecha aproximada de salida (acepta 'mediados de diciembre', 'Semana Santa', etc.).\n5. duracion: fecha de regreso o número de noches.\n6. adultos: número de adultos.\n7. ninos: número de niños y sus edades (0 si no viajan niños).\n8. ciudad_origen: desde dónde sale.\n\nOpcionales (pregunta en un solo mensaje al final, el cliente puede omitirlos):\n- correo electrónico.\n- presupuesto aproximado por persona o total.\n- servicio: paquete completo, solo vuelo, solo hotel, tour, crucero, traslado.\n- hospedaje preferido (todo incluido, categoría de hotel, posada).\n- observaciones: luna de miel, aniversario, movilidad reducida, mascotas, etc.\n\n## Reglas de conversación\n- ANTES de cada pregunta, revisa TODO el historial. Extrae cualquier dato ya mencionado, aunque haya sido de forma implícita.\n  Ejemplos: 'quiero ir a Margarita' => destino = Isla de Margarita. 'vamos mi esposa y yo' => adultos = 2. 'con mis 2 hijos de 5 y 8' => ninos = 2 (5 y 8 años). 'del 15 al 20 de diciembre' => fecha_salida y duracion resueltas.\n- NUNCA preguntes un dato que el cliente ya dio. Si un dato es ambiguo, confírmalo en vez de preguntarlo de nuevo ('¿Serían 2 adultos, correcto?').\n- Pide máximo 2 datos por mensaje. Agrupa preguntas relacionadas (ej. fechas juntas, pasajeros juntos).\n- Si el cliente da varios datos en un mensaje, agradécelo y pide solo lo faltante.\n- Si el cliente pregunta algo general del destino, responde en 1 o 2 frases y retoma la captación.\n- Si el mensaje no tiene relación con viajes, redirige con amabilidad.\n- No inventes promociones, precios, hoteles ni políticas.\n\n## Cierre\nCuando tengas TODOS los datos obligatorios:\n1. Muestra un resumen en lista y pide confirmación ('¿Todo correcto?').\n2. Cuando el cliente confirme, usa la herramienta 'Transferir_cliente_a_vendedores' UNA sola vez.\n3. Luego despídete: indica que un vendedor lo contactará pronto por el teléfono indicado.\nSi el cliente corrige un dato después de la transferencia, vuelve a usar la herramienta indicando 'ACTUALIZACIÓN' en la intención.\n\nSi el cliente pide hablar con una persona, captura al menos nombre, teléfono y destino, y transfiere de inmediato.",
+          "maxIterations": 10
+        }
+      },
+      "id": "a1f0c7d2-0002-4a10-9b01-000000000002",
+      "name": "Asistente de viajes",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5-5",
+          "cachedResultName": "Claude Sonnet 5.5"
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "a1f0c7d2-0003-4a10-9b01-000000000003",
+      "name": "Modelo Claude",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [140, 220]
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 40
+      },
+      "id": "a1f0c7d2-0004-4a10-9b01-000000000004",
+      "name": "Memoria de conversación",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [300, 220]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Transferir_cliente_a_vendedores: envía la ficha completa del cliente al equipo de ventas por correo. Úsala SOLO cuando el cliente confirmó el resumen con todos los datos obligatorios, o cuando pide hablar con una persona. Úsala una sola vez por cliente, salvo correcciones posteriores.",
+        "sendTo": "ventas@tu-agencia.com",
+        "subject": "={{ '🧳 Nuevo cliente: ' + $fromAI('nombre', 'Nombre y apellido del cliente', 'string') + ' → ' + $fromAI('destino', 'Destino del viaje, ej. Isla de Margarita', 'string') }}",
+        "emailType": "text",
+        "message": "=NUEVO CLIENTE CAPTADO POR EL BOT\n\nIntención: {{ $fromAI('intencion', 'Qué pide el cliente: COTIZACIÓN, RESERVA, HABLAR CON ASESOR o ACTUALIZACIÓN de un lead previo', 'string') }}\n\nNombre: {{ $fromAI('nombre', 'Nombre y apellido del cliente', 'string') }}\nTeléfono/WhatsApp: {{ $fromAI('telefono', 'Teléfono o WhatsApp de contacto con código de país si lo dio', 'string') }}\nCorreo: {{ $fromAI('correo', 'Correo electrónico, o \"No indicado\"', 'string') }}\n\nDestino: {{ $fromAI('destino', 'Destino del viaje, ej. Isla de Margarita', 'string') }}\nCiudad de origen: {{ $fromAI('ciudad_origen', 'Ciudad desde donde sale el cliente', 'string') }}\nFecha de salida: {{ $fromAI('fecha_salida', 'Fecha o periodo de salida tal como lo indicó el cliente', 'string') }}\nDuración / regreso: {{ $fromAI('duracion', 'Fecha de regreso o número de noches', 'string') }}\n\nAdultos: {{ $fromAI('adultos', 'Número de adultos', 'number') }}\nNiños y edades: {{ $fromAI('ninos', 'Número de niños y sus edades, ej. \"2 (5 y 8 años)\" o \"0\"', 'string') }}\n\nServicio: {{ $fromAI('servicio', 'Paquete, solo vuelo, solo hotel, tour, crucero, traslado, o \"No indicado\"', 'string') }}\nPresupuesto: {{ $fromAI('presupuesto', 'Presupuesto aproximado, o \"No indicado\"', 'string') }}\nObservaciones: {{ $fromAI('observaciones', 'Hospedaje preferido, ocasión especial, necesidades especiales, o \"Ninguna\"', 'string') }}\n\n---\nID de conversación: {{ $('Chat del cliente').item.json.sessionId }}\nRecibido: {{ $now.setZone('America/Caracas').toFormat('dd/LL/yyyy HH:mm') }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a1f0c7d2-0005-4a10-9b01-000000000005",
+      "name": "Transferir_cliente_a_vendedores",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [460, 220],
+      "webhookId": "9c4d3b21-5e6f-4a70-9b82-c3d4e5f60712"
+    },
+    {
+      "parameters": {
+        "content": "## Bot Agencia de Viajes\n**Función:** capta los datos del cliente y los transfiere a vendedores.\n\n**Antes de activar:**\n1. Asigna la credencial **Anthropic** en *Modelo Claude*.\n2. Asigna la credencial **Gmail** en *Transferir_cliente_a_vendedores*.\n3. Cambia `ventas@tu-agencia.com` por el correo real de ventas.\n4. Ajusta la zona horaria (`America/Caracas`) si aplica.\n\n**Canal:** chat público de n8n. Para WhatsApp/Telegram, reemplaza el disparador y usa el ID del chat como clave de memoria.",
+        "height": 340,
+        "width": 420,
+        "color": 4
+      },
+      "id": "a1f0c7d2-0006-4a10-9b01-000000000006",
+      "name": "Nota de configuración",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-460, -60]
+    }
+  ],
+  "connections": {
+    "Chat del cliente": {
+      "main": [
+        [
+          {
+            "node": "Asistente de viajes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo Claude": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Asistente de viajes",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria de conversación": {
+      "ai_memory": [
+        [
+          {
+            "node": "Asistente de viajes",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transferir_cliente_a_vendedores": {
+      "ai_tool": [
+        [
+          {
+            "node": "Asistente de viajes",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
